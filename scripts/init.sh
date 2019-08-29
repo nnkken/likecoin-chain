@@ -19,6 +19,8 @@ fi
 
 CHAIN_ID=`grep chain_id "$GENESIS_PATH" | sed 's/ *"chain_id": *"\(.*\)"/\1/g' | sed 's/,$//g'`
 
+# TODO: if .liked exists, ask for removal and re-init
+
 mkdir -p "$LIKE_HOME/.liked"
 mkdir -p "$LIKE_HOME/.likecli"
 
@@ -35,4 +37,3 @@ ADDRESS=$(docker run --rm -it --volume "$LIKE_HOME/.likecli:/root/.likecli" like
 echo ""
 echo "--------------------------------------------------------------------------------"
 echo "Key initialized, your address is $ADDRESS"
-echo "Send us this address to get tokens from faucet for staking"
