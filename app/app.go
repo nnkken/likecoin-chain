@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -236,6 +237,35 @@ func NewLikeApp(logger log.Logger, db dbm.DB, traceStore io.Writer, loadLatest b
 	}
 
 	return app
+}
+
+func (app *LikeApp) Test() {
+	ctx := app.BaseApp.NewContext(true, abci.Header{})
+	accs := app.accountKeeper.GetAllAccounts(ctx)
+	delegations := app.stakingKeeper.GetAllDelegations(ctx)
+
+	balances := map[string]sdk.Dec{}
+	for _, acc := range accs {
+		coins := acc.GetCoins()
+		for _, coin := range coins {
+			if coin.Denom == "nanolike" {
+				balances[acc.GetAddress().String()] = coin.Amount.ToDec()
+			}
+		}
+	}
+	for _, del := range delegations {
+		addr := del.GetDelegatorAddr().String()
+		_, ok := balances[addr]
+		if !ok {
+			// WTF?
+			fmt.Printf("Warning: delegator %s has no account?\n", addr)
+			balances[addr] = sdk.NewDec(0)
+		}
+		balances[addr] = balances[addr].Add(del.Shares)
+	}
+	for addr, balance := range balances {
+		fmt.Printf("\"%s\": \"%s\"\n", addr, balance.String())
+	}
 }
 
 // application updates every begin block

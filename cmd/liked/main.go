@@ -68,7 +68,7 @@ func persistentPreRunEFn(ctx *server.Context) func(cmd *cobra.Command, args []st
 	}
 }
 
-func main() {
+func mainOld() {
 	cdc := app.MakeCodec()
 
 	config := sdk.GetConfig()
@@ -105,6 +105,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func main() {
+	db, err := dbm.NewGoLevelDB("application", ".")
+	if err != nil {
+		panic(err)
+	}
+	app := app.NewLikeApp(
+		log.NewNopLogger(), db, nil, true, invCheckPeriod,
+		baseapp.SetPruning(store.NewPruningOptionsFromString(viper.GetString("pruning"))),
+		baseapp.SetMinGasPrices(viper.GetString(server.FlagMinGasPrices)),
+		baseapp.SetHaltHeight(uint64(viper.GetInt(server.FlagHaltHeight))),
+	)
+    app.Test()
 }
 
 func newApp(logger log.Logger, db dbm.DB, traceStore io.Writer) abci.Application {
