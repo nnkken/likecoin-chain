@@ -25,8 +25,8 @@ func registerQueryRoutes(cliCtx context.CLIContext, r *mux.Router) {
 	).Methods("GET")
 
 	r.HandleFunc(
-		"/iscn/authors/{authorCid}",
-		authorHandlerFn(cliCtx),
+		"/iscn/entities/{entityCid}",
+		entityHandlerFn(cliCtx),
 	).Methods("GET")
 }
 
@@ -84,17 +84,17 @@ func recordHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
 	}
 }
 
-func authorHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
+func entityHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
-		authorCidStr := vars["authorCid"]
-		authorCid, err := base64.URLEncoding.DecodeString(authorCidStr)
+		entityCidStr := vars["entityCid"]
+		entityCid, err := base64.URLEncoding.DecodeString(entityCidStr)
 		if err != nil {
 			rest.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		params := types.QueryAuthorParams{
-			Cid: authorCid,
+		params := types.QueryEntityParams{
+			Cid: entityCid,
 		}
 		bz, err := cliCtx.Codec.MarshalJSON(params)
 		if err != nil {
@@ -107,7 +107,7 @@ func authorHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
 			return
 		}
 
-		endpoint := fmt.Sprintf("custom/%s/%s", types.ModuleName, types.QueryAuthor)
+		endpoint := fmt.Sprintf("custom/%s/%s", types.ModuleName, types.QueryEntity)
 
 		res, height, err := cliCtx.QueryWithData(endpoint, bz)
 		if err != nil {

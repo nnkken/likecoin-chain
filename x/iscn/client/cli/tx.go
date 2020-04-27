@@ -47,23 +47,23 @@ func GetCmdCreateIscn(cdc *codec.Codec) *cobra.Command {
 				Version: 1,
 				Stakeholders: []types.Stakeholder{
 					{
-						Type:  "author",
-						Id:    "testing-author-asdf",
-						Stake: 1337,
+						Type:   "author",
+						Entity: []byte("testing-author-asdf"),
+						Stake:  1337,
 					},
 					{
-						Type:  "whoever",
-						Id:    "testing-whoever-asdf",
-						Stake: 2345,
+						Type:   "whoever",
+						Entity: []byte("testing-whoever-asdf"),
+						Stake:  2345,
 					},
 				},
 				Timestamp: 1234567890,
 				Parent:    "cid-parent",
-				Right: []types.Right{
+				Rights: []types.Right{
 					{
-						Holder: "Chung",
+						Holder: []byte("Chung"),
 						Type:   "license",
-						Terms:  "cc-by-sa-4.0",
+						Terms:  []byte("cc-by-sa-4.0"),
 						Period: types.Period{
 							To: "2030-01-01 12:34:56Z",
 						},
@@ -108,13 +108,13 @@ func GetCmdAddAuthor(cdc *codec.Codec) *cobra.Command {
 			cliCtx := context.NewCLIContext().WithCodec(cdc)
 
 			// TODO: read from file?
-			author := types.Author{
+			author := types.Entity{
 				Name:        "Chung",
 				Description: "Dlockchain developer",
 			}
 			from := cliCtx.GetFromAddress()
 
-			msg := types.NewMsgAddAuthor(from, author)
+			msg := types.NewMsgAddEntity(from, author)
 			s, err := cdc.MarshalJSONIndent(msg, "", "  ")
 			if err != nil {
 				panic(err)

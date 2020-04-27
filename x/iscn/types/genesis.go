@@ -7,7 +7,7 @@ type IscnPair struct {
 
 type GenesisState struct {
 	Params      Params     `json:"params" yaml:"params"`
-	Authors     []Author   `json:"authors" yaml:"authors"`
+	Entities    []Entity   `json:"entities" yaml:"entities"`
 	RightTerms  []Right    `json:"rightTerms" yaml:"rightTerms"`
 	IscnRecords []IscnPair `json:"iscnRecords" yaml:"iscnRecords"`
 }

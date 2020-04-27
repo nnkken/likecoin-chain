@@ -4,13 +4,20 @@ import (
 	"encoding/json"
 )
 
-type Author struct {
+// These are for internal usage, not for transactions.
+// Transactions will contain records which are more human readable, and could be transformed into structures.
+
+// TODO: better name?
+type Entity struct {
 	Name        string `json:"name" yaml:"name"`
 	Description string `json:"description" yaml:"description"`
+	// TODO: custom fields
 }
 
-func (author Author) String() string {
-	bz, err := json.Marshal(author)
+type CID = []byte
+
+func (entity Entity) String() string {
+	bz, err := json.Marshal(entity)
 	if err != nil {
 		panic(err)
 	}
@@ -18,26 +25,30 @@ func (author Author) String() string {
 }
 
 type Stakeholder struct {
-	Type  string `json:"type" yaml:"type"`
-	Id    string `json:"id" yaml:"id"`
-	Stake uint32 `json:"stake" yaml:"stake"`
+	Type   string `json:"type" yaml:"type"`
+	Entity CID    `json:"entity" yaml:"entity"`
+	Stake  uint32 `json:"stake" yaml:"stake"`
 }
 
 type Period struct {
-	From string `json:"from" yaml:"from"`
-	To   string `json:"to" yaml:"to"`
+	From int64 `json:"from" yaml:"from"`
+	To   int64 `json:"to" yaml:"to"`
+}
+
+func (p Period) String() string {
+	return ""
+}
+
+type Right struct {
+	Type      string `json:"type" yaml:"type"`
+	Holder    CID    `json:"holder" yaml:"holder"`
+	Terms     CID    `json:"terms" yaml:"terms"`
+	Period    Period `json:"period" yaml:"period"`
+	Territory string `json:"territory" yaml:"territory"`
 }
 
 type RightTerms struct {
 	Content string `json:"content" yaml:"content"`
-}
-
-type Right struct {
-	Holder    string `json:"holder" yaml:"holder"`
-	Type      string `json:"type" yaml:"type"`
-	Terms     string `json:"terms" yaml:"terms"`
-	Period    Period `json:"period" yaml:"period"`
-	Territory string `json:"territory" yaml:"territory"`
 }
 
 type IscnContent struct {
@@ -55,9 +66,9 @@ type IscnContent struct {
 type IscnRecord struct {
 	Stakeholders []Stakeholder `json:"stakeholders" yaml:"stakeholders"`
 	Timestamp    int64         `json:"timestamp" yaml:"timestamp"`
-	Parent       string        `json:"parent" yaml:"parent"`
+	Parent       CID           `json:"parent" yaml:"parent"`
 	Version      uint32        `json:"version" yaml:"version"`
-	Right        []Right       `json:"right" yaml:"right"`
+	Rights       []Right       `json:"rights" yaml:"rights"`
 	Content      IscnContent   `json:"content" yaml:"content"`
 }
 

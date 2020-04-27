@@ -14,8 +14,14 @@ func NewQuerier(k Keeper) sdk.Querier {
 			return queryParams(ctx, req, k)
 		case QueryIscnRecord:
 			return queryRecord(ctx, req, k)
-		case QueryAuthor:
+		case QueryEntity:
 			return queryAuthor(ctx, req, k)
+		case QueryCidBlockGet:
+			return queryCidBlockGet(ctx, req, k)
+		case QueryCidBlockGetSize:
+			return queryCidBlockGetSize(ctx, req, k)
+		case QueryCidBlockHas:
+			return queryCidBlockHas(ctx, req, k)
 		default:
 			return nil, sdk.ErrUnknownRequest("unknown iscn query endpoint")
 		}
@@ -50,14 +56,62 @@ func queryRecord(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.
 }
 
 func queryAuthor(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
-	params := types.QueryAuthorParams{}
+	params := types.QueryEntityParams{}
 	err := types.ModuleCdc.UnmarshalJSON(req.Data, &params)
 	if err != nil {
 		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to unmarshal JSON request: %s", err.Error()))
 	}
-	author := k.GetAuthor(ctx, params.Cid)
+	author := k.GetEntity(ctx, params.Cid)
 
 	res, err := codec.MarshalJSONIndent(ModuleCdc, author)
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
+	}
+
+	return res, nil
+}
+
+func queryCidBlockGet(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
+	params := types.QueryCidParams{}
+	err := types.ModuleCdc.UnmarshalJSON(req.Data, &params)
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to unmarshal JSON request: %s", err.Error()))
+	}
+	block := k.GetCidBlock(ctx, params.Cid)
+
+	res, err := codec.MarshalJSONIndent(ModuleCdc, block)
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
+	}
+
+	return res, nil
+}
+
+func queryCidBlockGetSize(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
+	params := types.QueryCidParams{}
+	err := types.ModuleCdc.UnmarshalJSON(req.Data, &params)
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to unmarshal JSON request: %s", err.Error()))
+	}
+	block := k.GetCidBlock(ctx, params.Cid)
+
+	res, err := codec.MarshalJSONIndent(ModuleCdc, len(block))
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
+	}
+
+	return res, nil
+}
+
+func queryCidBlockHas(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
+	params := types.QueryCidParams{}
+	err := types.ModuleCdc.UnmarshalJSON(req.Data, &params)
+	if err != nil {
+		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to unmarshal JSON request: %s", err.Error()))
+	}
+	has := k.HasCidBlock(ctx, params.Cid)
+
+	res, err := codec.MarshalJSONIndent(ModuleCdc, has)
 	if err != nil {
 		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
 	}

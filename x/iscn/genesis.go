@@ -11,8 +11,8 @@ func InitGenesis(ctx sdk.Context, keeper Keeper, genesisState GenesisState) []ab
 	for _, record := range genesisState.IscnRecords {
 		keeper.SetIscnRecord(ctx, record.Id, &record.Record)
 	}
-	for _, author := range genesisState.Authors {
-		keeper.SetAuthor(ctx, &author)
+	for _, entity := range genesisState.Entities {
+		keeper.SetEntity(ctx, &entity)
 	}
 	keeper.SetIscnCount(ctx, uint64(len(genesisState.IscnRecords)))
 	return nil
@@ -20,9 +20,9 @@ func InitGenesis(ctx sdk.Context, keeper Keeper, genesisState GenesisState) []ab
 
 func ExportGenesis(ctx sdk.Context, keeper Keeper) GenesisState {
 	params := keeper.GetParams(ctx)
-	authors := []Author{}
-	keeper.IterateAuthors(ctx, func(_ []byte, author *Author) bool {
-		authors = append(authors, *author)
+	entities := []Entity{}
+	keeper.IterateEntitys(ctx, func(_ []byte, entity *Entity) bool {
+		entities = append(entities, *entity)
 		return false
 	})
 	records := []types.IscnPair{}
@@ -33,9 +33,10 @@ func ExportGenesis(ctx sdk.Context, keeper Keeper) GenesisState {
 		})
 		return false
 	})
+	// TODO: CIDs
 	return GenesisState{
 		Params:      params,
-		Authors:     authors,
+		Entities:    entities,
 		IscnRecords: records,
 	}
 }

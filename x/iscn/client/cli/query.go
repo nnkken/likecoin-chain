@@ -90,7 +90,7 @@ $ likecli query iscn author xxxxxxx
 			if err != nil {
 				return err
 			}
-			queryData := types.QueryAuthorParams{
+			queryData := types.QueryEntityParams{
 				Cid: cid,
 			}
 			bz, err := cdc.MarshalJSON(queryData)
@@ -98,12 +98,12 @@ $ likecli query iscn author xxxxxxx
 				return err
 			}
 
-			res, _, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/%s", storeName, types.QueryAuthor), bz)
+			res, _, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/%s", storeName, types.QueryEntity), bz)
 			if err != nil {
 				return err
 			}
 
-			author := types.Author{}
+			author := types.Entity{}
 			if len(res) > 0 {
 				cdc.UnmarshalJSON(res, &author)
 			}

@@ -5,13 +5,16 @@ import (
 )
 
 const (
-	ModuleName      = types.ModuleName
-	StoreKey        = types.StoreKey
-	QuerierRoute    = types.QuerierRoute
-	RouterKey       = types.RouterKey
-	QueryAuthor     = types.QueryAuthor
-	QueryIscnRecord = types.QueryIscnRecord
-	QueryParams     = types.QueryParams
+	ModuleName           = types.ModuleName
+	StoreKey             = types.StoreKey
+	QuerierRoute         = types.QuerierRoute
+	RouterKey            = types.RouterKey
+	QueryEntity          = types.QueryEntity
+	QueryIscnRecord      = types.QueryIscnRecord
+	QueryParams          = types.QueryParams
+	QueryCidBlockGet     = types.QueryCidBlockGet
+	QueryCidBlockGetSize = types.QueryCidBlockGetSize
+	QueryCidBlockHas     = types.QueryCidBlockHas
 )
 
 var (
@@ -26,25 +29,35 @@ var (
 	ValidateGenesis             = types.ValidateGenesis
 	IscnRecordKey               = types.IscnRecordKey
 	IscnCountKey                = types.IscnCountKey
-	AuthorKey                   = types.AuthorKey
+	EntityKey                   = types.EntityKey
 	RightTermsKey               = types.RightTermsKey
+	CidBlockKey                 = types.CidBlockKey
 	GetIscnRecordKey            = types.GetIscnRecordKey
-	GetAuthorKey                = types.GetAuthorKey
+	GetEntityKey                = types.GetEntityKey
 	GetRightTermsKey            = types.GetRightTermsKey
+	GetCidBlockKey              = types.GetCidBlockKey
 	EventTypeCreateIscn         = types.EventTypeCreateIscn
-	EventTypeAddAuthor          = types.EventTypeAddAuthor
+	EventTypeAddEntity          = types.EventTypeAddEntity
 	AttributeKeyIscnId          = types.AttributeKeyIscnId
-	AttributeKeyAuthorCid       = types.AttributeKeyAuthorCid
+	AttributeKeyEntityCid       = types.AttributeKeyEntityCid
 	AttributeValueCategory      = types.AttributeValueCategory
 	RegisterCodec               = types.RegisterCodec
 )
 
 type (
-	MsgCreateIscn = types.MsgCreateIscn
-	MsgAddAuthor  = types.MsgAddAuthor
-	IscnRecord    = types.IscnRecord
-	Author        = types.Author
-	RightTerms    = types.RightTerms
-	Params        = types.Params
-	GenesisState  = types.GenesisState
+	MsgCreateIscn   = types.MsgCreateIscn
+	MsgAddEntity    = types.MsgAddEntity
+	EntityByCid     = types.EntityByCid
+	EntityInput     = types.EntityInput
+	RightTermsByCid = types.RightTermsByCid
+	RightTermsInput = types.RightTermsInput
+	IscnRecord      = types.IscnRecord
+	Entity          = types.Entity
+	Stakeholder     = types.Stakeholder
+	Right           = types.Right
+	RightTerms      = types.RightTerms
+	IscnContent     = types.IscnContent
+	CID             = types.CID
+	Params          = types.Params
+	GenesisState    = types.GenesisState
 )

@@ -1,21 +1,26 @@
 package types
 
 const (
-	QueryIscnRecord = "records"
-	QueryAuthor     = "author"
-	QueryParams     = "params"
+	QueryIscnRecord      = "records"
+	QueryEntity          = "entity"
+	QueryParams          = "params"
+	QueryCidBlockGet     = "cid_get"
+	QueryCidBlockGetSize = "cid_get_size"
+	QueryCidBlockHas     = "cid_has"
 )
 
-// TODO: query author and terms by name?
-
-type QueryAuthorParams struct {
+type QueryEntityParams struct {
 	Cid []byte
 }
 
-type QueryRightTermParams struct {
+type QueryRightTermsParams struct {
 	Cid []byte
 }
 
 type QueryRecordParams struct {
 	Id []byte // TODO: string?
+}
+
+type QueryCidParams struct {
+	Cid []byte
 }

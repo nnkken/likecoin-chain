@@ -69,24 +69,41 @@ func (k Keeper) SetParams(ctx sdk.Context, params Params) {
 	k.paramstore.SetParamSet(ctx, &params)
 }
 
-func (k Keeper) SetAuthor(ctx sdk.Context, author *Author) (authorCid []byte) {
-	bz := k.cdc.MustMarshalBinaryLengthPrefixed(author) // TODO: cbor?
-	authorCid = tmhash.Sum(bz)                          // TODO: cid
-	key := GetAuthorKey(authorCid)
+func (k Keeper) SetEntity(ctx sdk.Context, entity *Entity) CID {
+	// TODO: call SetCid and record only the type is entity
+	bz := k.cdc.MustMarshalBinaryLengthPrefixed(entity) // TODO: cbor?
+	cid := tmhash.Sum(bz)                               // TODO: cid
+	key := GetEntityKey(cid)
 	ctx.KVStore(k.storeKey).Set(key, bz)
-	return authorCid
+	return cid
 }
 
-func (k Keeper) GetAuthor(ctx sdk.Context, authorCid []byte) *Author {
-	key := GetAuthorKey(authorCid)
+func (k Keeper) GetEntity(ctx sdk.Context, cid CID) *Entity {
+	key := GetEntityKey(cid)
 	bz := ctx.KVStore(k.storeKey).Get(key)
 	if bz == nil {
 		return nil
 	}
-	author := Author{}
-	k.cdc.MustUnmarshalBinaryLengthPrefixed(bz, &author)
-	return &author
+	entity := Entity{}
+	k.cdc.MustUnmarshalBinaryLengthPrefixed(bz, &entity)
+	return &entity
 }
+
+func (k Keeper) IterateEntitys(ctx sdk.Context, f func(cid CID, entity *Entity) bool) {
+	store := ctx.KVStore(k.storeKey)
+	iterator := sdk.KVStorePrefixIterator(store, EntityKey)
+	defer iterator.Close()
+	for ; iterator.Valid(); iterator.Next() {
+		entityCid := iterator.Key()[len(EntityKey):]
+		entity := Entity{}
+		k.cdc.MustUnmarshalBinaryLengthPrefixed(iterator.Value(), &entity)
+		stop := f(entityCid, &entity)
+		if stop {
+			break
+		}
+	}
+}
+
 func (k Keeper) SetIscnCount(ctx sdk.Context, count uint64) {
 	bz := k.cdc.MustMarshalBinaryLengthPrefixed(count)
 	ctx.KVStore(k.storeKey).Set(IscnCountKey, bz)
@@ -99,21 +116,6 @@ func (k Keeper) GetIscnCount(ctx sdk.Context) uint64 {
 		k.cdc.MustUnmarshalBinaryLengthPrefixed(bz, &count)
 	}
 	return count
-}
-
-func (k Keeper) IterateAuthors(ctx sdk.Context, f func(authorCid []byte, author *Author) bool) {
-	store := ctx.KVStore(k.storeKey)
-	iterator := sdk.KVStorePrefixIterator(store, AuthorKey)
-	defer iterator.Close()
-	for ; iterator.Valid(); iterator.Next() {
-		authorCid := iterator.Key()[len(AuthorKey):]
-		author := Author{}
-		k.cdc.MustUnmarshalBinaryLengthPrefixed(iterator.Value(), &author)
-		stop := f(authorCid, &author)
-		if stop {
-			break
-		}
-	}
 }
 
 func (k Keeper) SetIscnRecord(ctx sdk.Context, iscnId []byte, record *IscnRecord) {
@@ -160,7 +162,7 @@ func (k Keeper) AddIscnRecord(ctx sdk.Context, feePayer sdk.AccAddress, record *
 	}
 	// TODO: checkings (in handler?)
 	// 1. len(stakeholder) > 0?
-	// 2. one author only?
+	// 2. one entity only?
 	feePerByte := k.GetParams(ctx).FeePerByte
 	feeAmount := feePerByte.Amount.MulInt64(int64(len(ctx.TxBytes())))
 	fees := sdk.NewCoins(sdk.NewCoin(feePerByte.Denom, feeAmount.Ceil().RoundInt()))
@@ -176,31 +178,31 @@ func (k Keeper) AddIscnRecord(ctx sdk.Context, feePayer sdk.AccAddress, record *
 			// TODO: proper error
 			return nil, sdk.NewError(DefaultCodespace, 3, "Unknown stakeholder type: %s", stakeholder.Type)
 		}
-		if stakeholder.Type == "author" {
-			authorPrefix := "likecoin-chain://authors/" // TODO: better format
-			if strings.HasPrefix(stakeholder.Id, authorPrefix) {
-				cidStr := stakeholder.Id[len(authorPrefix):]
+		if stakeholder.Type == "entity" {
+			entityPrefix := "likecoin-chain://entities/" // TODO: better format
+			if strings.HasPrefix(stakeholder.Entity, entityPrefix) {
+				cidStr := stakeholder.Entity[len(entityPrefix):]
 				cid, err := base64.URLEncoding.DecodeString(cidStr)
 				if err != nil {
 					// TODO: proper error
-					return nil, sdk.NewError(DefaultCodespace, 4, "Invalid author string: %s", err.Error())
+					return nil, sdk.NewError(DefaultCodespace, 4, "Invalid entity string: %s", err.Error())
 				}
-				if k.GetAuthor(ctx, cid) == nil {
+				if k.GetEntity(ctx, cid) == nil {
 					// TODO: proper error
-					return nil, sdk.NewError(DefaultCodespace, 5, "Unknown author: %s", cidStr)
+					return nil, sdk.NewError(DefaultCodespace, 5, "Unknown entity: %s", cidStr)
 				}
-				stakeholder.Id = cidStr
+				stakeholder.Entity = cidStr
 			} else {
-				author := Author{}
-				err := k.cdc.UnmarshalJSON([]byte(stakeholder.Id), &author)
+				entity := Entity{}
+				err := k.cdc.UnmarshalJSON([]byte(stakeholder.Entity), &entity)
 				if err != nil {
 					// TODO: proper error
-					return nil, sdk.NewError(DefaultCodespace, 5, "Cannot decode author: %s", err.Error())
+					return nil, sdk.NewError(DefaultCodespace, 5, "Cannot decode entity: %s", err.Error())
 				}
-				cid := k.SetAuthor(ctx, &author)
+				cid := k.SetEntity(ctx, &entity)
 				cidStr := base64.URLEncoding.EncodeToString(cid)
-				stakeholder.Id = cidStr
-				// TODO: return author CID for tx event, or return event
+				stakeholder.Entity = cidStr
+				// TODO: return entity CID for tx event, or return event
 			}
 		}
 	}
@@ -212,4 +214,32 @@ func (k Keeper) AddIscnRecord(ctx sdk.Context, feePayer sdk.AccAddress, record *
 	id := hasher.Sum(nil)
 	k.SetIscnRecord(ctx, id, record)
 	return id, nil
+}
+
+func (k Keeper) SetCidBlock(ctx sdk.Context, cid []byte, block []byte) {
+	key := GetCidBlockKey(cid)
+	ctx.KVStore(k.storeKey).Set(key, block)
+}
+
+func (k Keeper) GetCidBlock(ctx sdk.Context, cid []byte) []byte {
+	key := GetCidBlockKey(cid)
+	return ctx.KVStore(k.storeKey).Get(key)
+}
+
+func (k Keeper) HasCidBlock(ctx sdk.Context, cid []byte) bool {
+	key := GetCidBlockKey(cid)
+	return ctx.KVStore(k.storeKey).Has(key)
+}
+
+func (k Keeper) IterateCidBlocks(ctx sdk.Context, f func(cid []byte, block []byte) bool) {
+	store := ctx.KVStore(k.storeKey)
+	iterator := sdk.KVStorePrefixIterator(store, CidBlockKey)
+	defer iterator.Close()
+	for ; iterator.Valid(); iterator.Next() {
+		cid := iterator.Key()[len(CidBlockKey):]
+		stop := f(cid, iterator.Value())
+		if stop {
+			break
+		}
+	}
 }
