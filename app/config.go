@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	appName = "LikeApp"
+	appName     = "LikeApp"
+	upgradeName = "TODO" // TODO
 
 	HumanCoinUnit = "LIKE"
 	BaseCoinUnit  = "nanolike"
@@ -51,7 +52,7 @@ func SetAddressPrefixes() {
 
 type EncodingConfig struct {
 	InterfaceRegistry types.InterfaceRegistry
-	Marshaler         codec.Marshaler
+	Marshaler         codec.Codec
 	TxConfig          client.TxConfig
 	Amino             *codec.LegacyAmino
 }
