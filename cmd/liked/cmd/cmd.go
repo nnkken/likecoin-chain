@@ -32,7 +32,6 @@ import (
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authclient "github.com/cosmos/cosmos-sdk/x/auth/client"
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
@@ -42,9 +41,6 @@ import (
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
-	vestingcli "github.com/cosmos/cosmos-sdk/x/auth/vesting/client/cli"
-
-	gaiacmd "github.com/cosmos/gaia/v4/cmd/gaiad/cmd"
 
 	"github.com/likecoin/likechain/ip"
 )
@@ -129,7 +125,6 @@ func txCommand() *cobra.Command {
 		authcmd.GetBroadcastCommand(),
 		authcmd.GetEncodeCommand(),
 		authcmd.GetDecodeCommand(),
-		vestingcli.GetTxCmd(),
 	)
 
 	app.ModuleBasics.AddTxCommands(txCmd)
@@ -142,7 +137,7 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 	encodingConfig := app.MakeEncodingConfig()
 
 	initClientCtx := client.Context{}.
-		WithJSONMarshaler(encodingConfig.Marshaler).
+		WithCodec(encodingConfig.Marshaler).
 		WithInterfaceRegistry(encodingConfig.InterfaceRegistry).
 		WithTxConfig(encodingConfig.TxConfig).
 		WithLegacyAmino(encodingConfig.Amino).
@@ -159,11 +154,9 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 				return err
 			}
 
-			return server.InterceptConfigsPreRunHandler(cmd)
+			return server.InterceptConfigsPreRunHandler(cmd, "", nil)
 		},
 	}
-
-	authclient.Codec = encodingConfig.Marshaler
 
 	config := sdk.GetConfig()
 	config.Seal()
@@ -171,13 +164,12 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 	rootCmd.AddCommand(
 		genutilcli.InitCmd(app.ModuleBasics, app.DefaultNodeHome),
 		genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultNodeHome),
-		MigrateGenesisCmd(),
 		genutilcli.GenTxCmd(
 			app.ModuleBasics, encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{},
 			app.DefaultNodeHome,
 		),
 		genutilcli.ValidateGenesisCmd(app.ModuleBasics),
-		gaiacmd.AddGenesisAccountCmd(app.DefaultNodeHome),
+		AddGenesisAccountCmd(app.DefaultNodeHome),
 		tmcli.NewCompletionCmd(rootCmd, true),
 		debug.Cmd(),
 	)
