@@ -90,6 +90,7 @@ import (
 	ibchost "github.com/cosmos/ibc-go/v2/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v2/modules/core/keeper"
 
+	wrappedauth "github.com/likecoin/likechain/x/auth"
 	"github.com/likecoin/likechain/x/iscn"
 	iscnkeeper "github.com/likecoin/likechain/x/iscn/keeper"
 	iscntypes "github.com/likecoin/likechain/x/iscn/types"
@@ -359,7 +360,7 @@ func NewLikeApp(
 		genutil.NewAppModule(
 			app.AccountKeeper, app.StakingKeeper, app.BaseApp.DeliverTx, encodingConfig.TxConfig,
 		),
-		auth.NewAppModule(appCodec, app.AccountKeeper, nil),
+		wrappedauth.NewAppModule(appCodec, app.AccountKeeper, nil),
 		bank.NewAppModule(appCodec, app.BankKeeper, app.AccountKeeper),
 		capability.NewAppModule(appCodec, *app.CapabilityKeeper),
 		crisis.NewAppModule(&app.CrisisKeeper, skipGenesisInvariants),
