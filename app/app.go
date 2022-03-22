@@ -93,6 +93,11 @@ import (
 	"github.com/likecoin/likechain/x/iscn"
 	iscnkeeper "github.com/likecoin/likechain/x/iscn/keeper"
 	iscntypes "github.com/likecoin/likechain/x/iscn/types"
+
+	bech32authmigration "github.com/likecoin/likechain/bech32-migration/auth"
+	bech32govmigration "github.com/likecoin/likechain/bech32-migration/gov"
+	bech32slashingmigration "github.com/likecoin/likechain/bech32-migration/slashing"
+	bech32stakingmigration "github.com/likecoin/likechain/bech32-migration/staking"
 )
 
 var (
@@ -365,9 +370,7 @@ func NewLikeApp(
 		crisis.NewAppModule(&app.CrisisKeeper, skipGenesisInvariants),
 		gov.NewAppModule(appCodec, app.GovKeeper, app.AccountKeeper, app.BankKeeper),
 		mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper),
-		slashing.NewAppModule(
-			appCodec, app.SlashingKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper,
-		),
+		slashing.NewAppModule(appCodec, app.SlashingKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper),
 		distr.NewAppModule(
 			appCodec, app.DistrKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper,
 		),
@@ -458,35 +461,42 @@ func NewLikeApp(
 	}
 	app.SetAnteHandler(anteHandler)
 
-	app.UpgradeKeeper.SetUpgradeHandler(
-		upgradeName,
-		func(ctx sdk.Context, _ upgradetypes.Plan, _ module.VersionMap) (module.VersionMap, error) {
-			app.IBCKepper.ConnectionKeeper.SetParams(ctx, ibcconnectiontypes.DefaultParams())
+	app.UpgradeMigrationHandler = func(ctx sdk.Context, _ upgradetypes.Plan, _ module.VersionMap) (module.VersionMap, error) {
+		ctx.Logger().Info("Before upgrade migration")
+		app.IBCKepper.ConnectionKeeper.SetParams(ctx, ibcconnectiontypes.DefaultParams())
 
-			fromVM := make(map[string]uint64)
-			for moduleName := range app.mm.Modules {
-				fromVM[moduleName] = 1
-			}
-			// delete new modules from the map, for _new_ modules as to not skip InitGenesis
-			delete(fromVM, authz.ModuleName)
-			delete(fromVM, feegrant.ModuleName)
-			// TODO: router
+		fromVM := make(map[string]uint64)
+		for moduleName := range app.mm.Modules {
+			fromVM[moduleName] = 1
+		}
+		// delete new modules from the map, for _new_ modules as to not skip InitGenesis
+		delete(fromVM, authz.ModuleName)
+		delete(fromVM, feegrant.ModuleName)
+		// TODO: router
 
-			// make fromVM[authtypes.ModuleName] = 2 to skip the first RunMigrations for auth (because from version 2 to migration version 2 will not migrate)
-			fromVM[authtypes.ModuleName] = 2
+		// make fromVM[authtypes.ModuleName] = 2 to skip the first RunMigrations for auth (because from version 2 to migration version 2 will not migrate)
+		fromVM[authtypes.ModuleName] = 2
 
-			// the first RunMigrations, which will migrate all the old modules except auth module
-			newVM, err := app.mm.RunMigrations(ctx, app.configurator, fromVM)
-			if err != nil {
-				return nil, err
-			}
-			// now update auth version back to 1, to make the second RunMigrations includes only auth
-			newVM[authtypes.ModuleName] = 1
+		// the first RunMigrations, which will migrate all the old modules except auth module
+		newVM, err := app.mm.RunMigrations(ctx, app.configurator, fromVM)
+		if err != nil {
+			return nil, err
+		}
+		// now update auth version back to 1, to make the second RunMigrations includes only auth
+		newVM[authtypes.ModuleName] = 1
 
-			// RunMigrations twice is just a way to make auth module's migrates after staking
-			return app.mm.RunMigrations(ctx, app.configurator, newVM)
-		},
-	)
+		// RunMigrations twice is just a way to make auth module's migrates after staking
+		newVersionMap, err := app.mm.RunMigrations(ctx, app.configurator, newVM)
+
+		// Migrate Bech32 addresses
+		bech32stakingmigration.MigrateAddressBech32(ctx, app.keys[stakingtypes.StoreKey], app.appCodec)
+		bech32slashingmigration.MigrateAddressBech32(ctx, app.keys[slashingtypes.StoreKey], app.appCodec)
+		bech32govmigration.MigrateAddressBech32(ctx, app.keys[govtypes.StoreKey], app.appCodec)
+		bech32authmigration.MigrateAddressBech32(ctx, app.keys[authtypes.StoreKey], app.appCodec)
+
+		ctx.Logger().Info("After upgrade migration", "newVersionMap", newVersionMap, "error", err)
+		return newVersionMap, err
+	}
 
 	if loadLatest {
 		if err := app.LoadLatestVersion(); err != nil {
