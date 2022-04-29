@@ -19,7 +19,7 @@ var (
 
 type AppModule struct {
 	staking.AppModule
-	querier Querier
+	querier *Querier
 	keeper  *keeper.Keeper
 }
 
@@ -38,7 +38,7 @@ func NewAppModule(
 
 func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(*am.keeper))
-	types.RegisterQueryServer(cfg.QueryServer(), &am.querier)
+	types.RegisterQueryServer(cfg.QueryServer(), am.querier)
 
 	m := keeper.NewMigrator(*am.keeper)
 	cfg.RegisterMigration(types.ModuleName, 1, m.Migrate1to2)

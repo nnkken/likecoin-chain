@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"sync"
 
-	"github.com/tendermint/tendermint/libs/log"
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	dbstore "github.com/cosmos/cosmos-sdk/store/dbadapter"
-	prefixstore "github.com/cosmos/cosmos-sdk/store/prefix"
-	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/address"
 
@@ -27,16 +25,16 @@ func GetTableKey(name string) []byte {
 	return hash[:8]
 }
 
+// `append` has concurrency issue so can't be used here
 func getIndexValidatorPrefix(valAddr sdk.ValAddress) []byte {
 	buf := &bytes.Buffer{}
 	buf.Write(ValidatorDelegationsIndexPrefix)
 	buf.Write(address.MustLengthPrefix(valAddr))
 	return buf.Bytes()
-	// return append(ValidatorDelegationsIndexPrefix, address.MustLengthPrefix(valAddr)...)
 }
 
+// `append` has concurrency issue so can't be used here
 func getIndexKey(valAddr sdk.ValAddress, delAddr sdk.AccAddress) []byte {
-	// return append(getIndexValidatorPrefix(valAddr), address.MustLengthPrefix(delAddr)...)
 	buf := &bytes.Buffer{}
 	buf.Write(ValidatorDelegationsIndexPrefix)
 	buf.Write(address.MustLengthPrefix(valAddr))
@@ -52,41 +50,37 @@ func encodeUint64(n uint64) []byte {
 
 type Querier struct {
 	types.QueryServer
-	keeper     *keeper.Keeper
-	cdc        codec.BinaryCodec
-	indexingDB dbm.DB
-	batch      dbm.Batch
-	readStore  dbstore.Store
+	keeper            *keeper.Keeper
+	cdc               codec.BinaryCodec
+	indexingDB        dbm.DB
+	batch             dbm.Batch
+	batchFlushQueue   chan dbm.Batch
+	flushSwitchSignal chan bool
+	buildingIndex     bool
+	lock              sync.Mutex
 }
 
-func NewQuerier(k *keeper.Keeper, cdc codec.BinaryCodec, indexingDB dbm.DB) Querier {
-	readStore := dbstore.Store{DB: indexingDB}
-	return Querier{
-		QueryServer: keeper.Querier{Keeper: *k},
-		keeper:      k,
-		cdc:         cdc,
-		indexingDB:  indexingDB,
-		batch:       indexingDB.NewBatch(),
-		readStore:   readStore,
+func NewQuerier(k *keeper.Keeper, cdc codec.BinaryCodec, indexingDB dbm.DB) *Querier {
+	q := Querier{
+		QueryServer:     keeper.Querier{Keeper: *k},
+		keeper:          k,
+		cdc:             cdc,
+		indexingDB:      indexingDB,
+		batch:           indexingDB.NewBatch(),
+		batchFlushQueue: make(chan dbm.Batch, 100),
+		buildingIndex:   false,
+		lock:            sync.Mutex{},
 	}
+	go q.batchFlusher()
+	return &q
 }
 
-func (q *Querier) batchSet(key, value []byte) {
-	err := q.batch.Set(key, value)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (q *Querier) batchDelete(key []byte) {
-	err := q.batch.Delete(key)
-	if err != nil {
-		panic(err)
-	}
+func (q *Querier) getStore() dbstore.Store {
+	return dbstore.Store{DB: q.indexingDB}
 }
 
 func (q *Querier) GetHeight() uint64 {
-	bz := q.readStore.Get(ValidatorDelegationsIndexHeightKey)
+	bz := q.getStore().Get(ValidatorDelegationsIndexHeightKey)
 	if bz == nil {
 		return 0
 	}
@@ -97,29 +91,40 @@ func (q *Querier) setHeight(newHeight uint64) {
 	q.batchSet(ValidatorDelegationsIndexHeightKey, encodeUint64(newHeight))
 }
 
-func (q *Querier) clearIndex() {
-	it, err := q.indexingDB.Iterator(nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	defer it.Close()
-	for ; it.Valid(); it.Next() {
-		q.batch.Delete(it.Key())
-	}
-}
-
+// TODO: need to make this async so it won't block the server (and drop connections)
 func (q *Querier) BuildIndex(ctx sdk.Context) {
 	blockHeight := ctx.BlockHeight()
 	ctx.Logger().Debug("Rebuilding index for ValidatorDelegations", "block_height", blockHeight)
-	q.clearIndex()
-	// TODO: this could be slow (30s up), should we put this in parallel? But seems hard...
-	q.keeper.IterateAllDelegations(ctx, func(delegation types.Delegation) bool {
-		key := getIndexKey(delegation.GetValidatorAddr(), delegation.GetDelegatorAddr())
-		q.batchSet(key, types.MustMarshalDelegation(q.cdc, delegation))
-		return false
-	})
-	q.batchSet(ValidatorDelegationsIndexHeightKey, encodeUint64(uint64(ctx.BlockHeight())))
-	q.flushBatch()
+	cachedStore, err := ctx.MultiStore().CacheMultiStoreWithVersion(blockHeight)
+	if err != nil {
+		panic(err)
+	}
+	newCtx := ctx.WithMultiStore(cachedStore)
+	b := q.queueBatch()
+	go func() {
+		// clear existing index
+		it, err := q.indexingDB.Iterator(nil, nil)
+		if err != nil {
+			panic(err)
+		}
+		defer it.Close()
+		for ; it.Valid(); it.Next() {
+			err := b.Delete(it.Key())
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		q.keeper.IterateAllDelegations(newCtx, func(delegation types.Delegation) bool {
+			key := getIndexKey(delegation.GetValidatorAddr(), delegation.GetDelegatorAddr())
+			err := b.Set(key, types.MustMarshalDelegation(q.cdc, delegation))
+			if err != nil {
+				panic(err)
+			}
+			return false
+		})
+		q.batchSet(ValidatorDelegationsIndexHeightKey, encodeUint64(uint64(ctx.BlockHeight())))
+	}()
 }
 
 func (q *Querier) BeginWriteIndex(ctx sdk.Context) {
@@ -164,19 +169,6 @@ func (q *Querier) UpdateIndex(ctx sdk.Context, delAddr sdk.AccAddress, valAddr s
 	}
 }
 
-func (q *Querier) flushBatch() {
-	b := q.batch
-	q.batch = q.indexingDB.NewBatch()
-	err := b.Write()
-	if err != nil {
-		panic(err)
-	}
-	err = b.Close()
-	if err != nil {
-		panic(err)
-	}
-}
-
 func (q *Querier) CommitWriteIndex(ctx sdk.Context) {
 	blockHeight := uint64(ctx.BlockHeight())
 	ctx.Logger().Debug(
@@ -184,43 +176,5 @@ func (q *Querier) CommitWriteIndex(ctx sdk.Context) {
 		"block_height", blockHeight,
 	)
 	q.setHeight(blockHeight)
-	q.flushBatch()
+	q.queueBatch()
 }
-
-func (q *Querier) DebugPrintValidatorKeys(logger log.Logger, valAddr sdk.ValAddress) {
-	height := q.GetHeight()
-	prefix := getIndexValidatorPrefix(valAddr)
-	logger.Debug("Begin iterating raw index DB", "validator", valAddr, "height", height, "prefix", prefix)
-	it, err := q.indexingDB.Iterator(prefix, storetypes.PrefixEndBytes(prefix))
-	if err != nil {
-		panic(err)
-	}
-	defer it.Close()
-	store := prefixstore.NewStore(q.readStore, prefix)
-	storeIt := store.Iterator(nil, nil)
-	defer storeIt.Close()
-	for ; it.Valid(); it.Next() {
-		logger.Debug("Iteration on raw index DB", "key", it.Key(), "value", types.MustUnmarshalDelegation(q.cdc, it.Value()), "validator", valAddr)
-	}
-	logger.Debug("Done iterating raw index DB", "validator", valAddr)
-	logger.Debug("Begin iterating prefixstore index DB", "validator", valAddr, "prefix", prefix)
-	for ; storeIt.Valid(); storeIt.Next() {
-		logger.Debug("Iteration on prefixstore index DB, prefix check", "prefix", prefix)
-		logger.Debug("Iteration on prefixstore index DB", "key", storeIt.Key(), "value", types.MustUnmarshalDelegation(q.cdc, storeIt.Value()), "validator", valAddr)
-	}
-	logger.Debug("Done iterating prefixstore index DB", "validator", valAddr)
-
-	it2, err := q.indexingDB.Iterator(prefix, storetypes.PrefixEndBytes(prefix))
-	if err != nil {
-		panic(err)
-	}
-	defer it2.Close()
-	logger.Debug("Begin second iterating raw index DB", "validator", valAddr, "prefix", prefix)
-	for ; it2.Valid(); it2.Next() {
-		logger.Debug("Iteration on raw index DB", "key", it2.Key(), "value", types.MustUnmarshalDelegation(q.cdc, it2.Value()), "validator", valAddr)
-	}
-	height = q.GetHeight()
-	logger.Debug("Done second iterating raw index DB", "validator", valAddr, "height", height)
-}
-
-// TODO: test write during iteration

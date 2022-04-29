@@ -226,7 +226,7 @@ func TestFuzz(t *testing.T) {
 	indexingDB := indexingBackendDB
 	indexedQuerier := NewQuerier(setup.StakingKeeper, setup.AppCodec, indexingDB)
 
-	setup.StakingKeeper.SetHooks(stakingtypes.NewMultiStakingHooks(DebugHooks{}, NewHooks(&indexedQuerier)))
+	setup.StakingKeeper.SetHooks(stakingtypes.NewMultiStakingHooks(DebugHooks{}, NewHooks(indexedQuerier)))
 
 	headerChan := make(chan tmproto.Header, 1)
 	queryDoneChan := make(chan stakingtypes.DelegationResponses, 1)

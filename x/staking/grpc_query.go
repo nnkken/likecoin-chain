@@ -2,11 +2,13 @@ package staking
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	prefixstore "github.com/cosmos/cosmos-sdk/store/prefix"
+	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
 
@@ -38,6 +40,7 @@ func DelegationsToDelegationResponses(
 }
 
 func (q *Querier) ValidatorDelegations(c context.Context, req *types.QueryValidatorDelegationsRequest) (*types.QueryValidatorDelegationsResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), telemetry.MetricKeyEndBlocker)
 	ctx := sdk.UnwrapSDKContext(c)
 	blockHeight := ctx.BlockHeight()
 	height := q.GetHeight()
@@ -67,7 +70,7 @@ func (q *Querier) ValidatorDelegations(c context.Context, req *types.QueryValida
 	if err != nil {
 		return nil, err
 	}
-	store := prefixstore.NewStore(q.readStore, getIndexValidatorPrefix(valAddr))
+	store := prefixstore.NewStore(q.getStore(), getIndexValidatorPrefix(valAddr))
 	delegations := []types.Delegation{}
 	pageRes, err := query.FilteredPaginate(store, req.Pagination, func(key, value []byte, accumulate bool) (bool, error) {
 		if accumulate {
