@@ -15,6 +15,12 @@ const (
 	HumanCoinUnit = "like"
 	BaseCoinUnit  = "nanolike"
 	LikeExponent  = 9
+
+	Bech32MainPrefix = "like"
+)
+
+var (
+	Bech32Prefixes = []string{Bech32MainPrefix, "cosmos"}
 )
 
 func RegisterDenoms() {
@@ -29,7 +35,7 @@ func RegisterDenoms() {
 }
 
 func SetAddressPrefixes() {
-	bech32PrefixesAccAddr := []string{"like", "cosmos"}
+	bech32PrefixesAccAddr := Bech32Prefixes
 	bech32PrefixesAccPub := make([]string, 0, len(bech32PrefixesAccAddr))
 	bech32PrefixesValAddr := make([]string, 0, len(bech32PrefixesAccAddr))
 	bech32PrefixesValPub := make([]string, 0, len(bech32PrefixesAccAddr))
@@ -51,7 +57,7 @@ func SetAddressPrefixes() {
 
 type EncodingConfig struct {
 	InterfaceRegistry types.InterfaceRegistry
-	Marshaler         codec.Codec
+	Codec             codec.Codec
 	TxConfig          client.TxConfig
 	Amino             *codec.LegacyAmino
 }
@@ -68,7 +74,7 @@ func MakeEncodingConfig() EncodingConfig {
 
 	return EncodingConfig{
 		InterfaceRegistry: interfaceRegistry,
-		Marshaler:         marshaler,
+		Codec:             marshaler,
 		TxConfig:          authtx.NewTxConfig(marshaler, authtx.DefaultSignModes),
 		Amino:             cdc,
 	}

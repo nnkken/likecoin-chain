@@ -46,7 +46,7 @@ type GenesisBalance struct {
 
 func SetupTestAppWithDefaultState() *TestingApp {
 	encodingCfg := likeapp.MakeEncodingConfig()
-	genesisState := likeapp.ModuleBasics.DefaultGenesis(encodingCfg.Marshaler)
+	genesisState := likeapp.ModuleBasics.DefaultGenesis(encodingCfg.Codec)
 	stateBytes, err := json.MarshalIndent(genesisState, "", "  ")
 	if err != nil {
 		panic(err)
@@ -99,7 +99,7 @@ func SetupTestAppWithIscnGenesis(genesisBalances []GenesisBalance, iscnGenesisJs
 	encodingCfg := likeapp.MakeEncodingConfig()
 	logger := log.NewTMLogger(os.Stdout)
 	app := likeapp.NewLikeApp(logger, db, nil, true, map[int64]bool{}, DefaultNodeHome, invCheckPeriod, encodingCfg, simapp.EmptyAppOptions{})
-	genesisState := likeapp.ModuleBasics.DefaultGenesis(encodingCfg.Marshaler)
+	genesisState := likeapp.ModuleBasics.DefaultGenesis(encodingCfg.Codec)
 	authGenesis := authtypes.NewGenesisState(authtypes.DefaultParams(), genAccs)
 	genesisState[authtypes.ModuleName] = app.AppCodec().MustMarshalJSON(authGenesis)
 

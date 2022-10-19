@@ -12,10 +12,10 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/simapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/ibc-go/v2/modules/apps/transfer/types"
-	clienttypes "github.com/cosmos/ibc-go/v2/modules/core/02-client/types"
-	channeltypes "github.com/cosmos/ibc-go/v2/modules/core/04-channel/types"
-	ibctesting "github.com/cosmos/ibc-go/v2/testing"
+	"github.com/cosmos/ibc-go/v5/modules/apps/transfer/types"
+	clienttypes "github.com/cosmos/ibc-go/v5/modules/core/02-client/types"
+	channeltypes "github.com/cosmos/ibc-go/v5/modules/core/04-channel/types"
+	ibctesting "github.com/cosmos/ibc-go/v5/testing"
 )
 
 func SetupTestingLikeApp() (ibctesting.TestingApp, map[string]json.RawMessage) {
@@ -26,7 +26,7 @@ func SetupTestingLikeApp() (ibctesting.TestingApp, map[string]json.RawMessage) {
 	encCdc := likeapp.MakeEncodingConfig()
 	app := likeapp.NewLikeApp(log.NewNopLogger(), db, nil, true, map[int64]bool{}, defaultNodeHome, invCheckPeriod, encCdc, simapp.EmptyAppOptions{})
 
-	return app, likeapp.ModuleBasics.DefaultGenesis(encCdc.Marshaler)
+	return app, likeapp.ModuleBasics.DefaultGenesis(encCdc.Codec)
 }
 
 // Overrides ibc testing suite to use LikeApp for testing instead of SimApp

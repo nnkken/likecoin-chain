@@ -17,7 +17,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
-	"github.com/cosmos/cosmos-sdk/client/rpc"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/version"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/auth/ante"
-	authrest "github.com/cosmos/cosmos-sdk/x/auth/client/rest"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -59,8 +57,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/genutil"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/cosmos/cosmos-sdk/x/gov"
+	govclient "github.com/cosmos/cosmos-sdk/x/gov/client"
 	govkeeper "github.com/cosmos/cosmos-sdk/x/gov/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
+	govv1beta1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1beta1"
 	"github.com/cosmos/cosmos-sdk/x/mint"
 	mintkeeper "github.com/cosmos/cosmos-sdk/x/mint/keeper"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
@@ -79,24 +80,24 @@ import (
 	upgradeclient "github.com/cosmos/cosmos-sdk/x/upgrade/client"
 	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
-	transfer "github.com/cosmos/ibc-go/v2/modules/apps/transfer"
-	ibctransferkeeper "github.com/cosmos/ibc-go/v2/modules/apps/transfer/keeper"
-	ibctransfertypes "github.com/cosmos/ibc-go/v2/modules/apps/transfer/types"
-	ibc "github.com/cosmos/ibc-go/v2/modules/core"
-	ibcclient "github.com/cosmos/ibc-go/v2/modules/core/02-client"
-	ibcclientclient "github.com/cosmos/ibc-go/v2/modules/core/02-client/client"
-	ibcclienttypes "github.com/cosmos/ibc-go/v2/modules/core/02-client/types"
-	porttypes "github.com/cosmos/ibc-go/v2/modules/core/05-port/types"
-	ibchost "github.com/cosmos/ibc-go/v2/modules/core/24-host"
-	ibckeeper "github.com/cosmos/ibc-go/v2/modules/core/keeper"
+	transfer "github.com/cosmos/ibc-go/v5/modules/apps/transfer"
+	ibctransferkeeper "github.com/cosmos/ibc-go/v5/modules/apps/transfer/keeper"
+	ibctransfertypes "github.com/cosmos/ibc-go/v5/modules/apps/transfer/types"
+	ibc "github.com/cosmos/ibc-go/v5/modules/core"
+	ibcclient "github.com/cosmos/ibc-go/v5/modules/core/02-client"
+	ibcclientclient "github.com/cosmos/ibc-go/v5/modules/core/02-client/client"
+	ibcclienttypes "github.com/cosmos/ibc-go/v5/modules/core/02-client/types"
+	porttypes "github.com/cosmos/ibc-go/v5/modules/core/05-port/types"
+	ibchost "github.com/cosmos/ibc-go/v5/modules/core/24-host"
+	ibckeeper "github.com/cosmos/ibc-go/v5/modules/core/keeper"
 
 	"github.com/likecoin/likecoin-chain/v3/x/iscn"
 	iscnkeeper "github.com/likecoin/likecoin-chain/v3/x/iscn/keeper"
 	iscntypes "github.com/likecoin/likecoin-chain/v3/x/iscn/types"
 
-	"github.com/likecoin/likecoin-chain/v3/backport/cosmos-sdk/v0.46.0-rc1/x/nft"
-	nftkeeper "github.com/likecoin/likecoin-chain/v3/backport/cosmos-sdk/v0.46.0-rc1/x/nft/keeper"
-	nftmodule "github.com/likecoin/likecoin-chain/v3/backport/cosmos-sdk/v0.46.0-rc1/x/nft/module"
+	"github.com/cosmos/cosmos-sdk/x/nft"
+	nftkeeper "github.com/cosmos/cosmos-sdk/x/nft/keeper"
+	nftmodule "github.com/cosmos/cosmos-sdk/x/nft/module"
 
 	"github.com/likecoin/likecoin-chain/v3/x/likenft"
 	likenftkeeper "github.com/likecoin/likecoin-chain/v3/x/likenft/keeper"
@@ -120,12 +121,14 @@ var (
 		mint.AppModuleBasic{},
 		distr.AppModuleBasic{},
 		gov.NewAppModuleBasic(
-			paramsclient.ProposalHandler,
-			distrclient.ProposalHandler,
-			upgradeclient.ProposalHandler,
-			upgradeclient.CancelProposalHandler,
-			ibcclientclient.UpdateClientProposalHandler,
-			ibcclientclient.UpgradeProposalHandler,
+			[]govclient.ProposalHandler{
+				paramsclient.ProposalHandler,
+				distrclient.ProposalHandler,
+				upgradeclient.LegacyProposalHandler,
+				upgradeclient.LegacyCancelProposalHandler,
+				ibcclientclient.UpdateClientProposalHandler,
+				ibcclientclient.UpgradeProposalHandler,
+			},
 		),
 		params.AppModuleBasic{},
 		crisis.AppModuleBasic{},
@@ -171,9 +174,9 @@ type LikeApp struct {
 	invCheckPeriod uint
 
 	// keys to access the substores
-	keys    map[string]*sdk.KVStoreKey
-	tkeys   map[string]*sdk.TransientStoreKey
-	memKeys map[string]*sdk.MemoryStoreKey
+	keys    map[string]*storetypes.KVStoreKey
+	tkeys   map[string]*storetypes.TransientStoreKey
+	memKeys map[string]*storetypes.MemoryStoreKey
 
 	// keepers
 	AccountKeeper    authkeeper.AccountKeeper
@@ -214,7 +217,7 @@ func NewLikeApp(
 	invCheckPeriod uint, encodingConfig EncodingConfig,
 	appOpts servertypes.AppOptions, baseAppOptions ...func(*baseapp.BaseApp),
 ) *LikeApp {
-	appCodec := encodingConfig.Marshaler
+	appCodec := encodingConfig.Codec
 	legacyAmino := encodingConfig.Amino
 	interfaceRegistry := encodingConfig.InterfaceRegistry
 
@@ -268,16 +271,15 @@ func NewLikeApp(
 	distrSubspace := app.ParamsKeeper.Subspace(distrtypes.ModuleName)
 	slashingSubspace := app.ParamsKeeper.Subspace(slashingtypes.ModuleName)
 	govSubspace := app.ParamsKeeper.Subspace(govtypes.ModuleName).
-		WithKeyTable(govtypes.ParamKeyTable())
+		WithKeyTable(govv1.ParamKeyTable())
 	crisisSubspace := app.ParamsKeeper.Subspace(crisistypes.ModuleName)
 	ibcTransferSubspace := app.ParamsKeeper.Subspace(ibctransfertypes.ModuleName)
 	ibcHostSubspace := app.ParamsKeeper.Subspace(ibchost.ModuleName)
 	iscnSubspace := app.ParamsKeeper.Subspace(iscntypes.ModuleName)
 	likeNftSubspace := app.ParamsKeeper.Subspace(likenfttypes.ModuleName)
 
-	bApp.SetParamStore(
-		app.ParamsKeeper.Subspace(baseapp.Paramspace).
-			WithKeyTable(paramskeeper.ConsensusParamsKeyTable()),
+	bApp.SetParamStore(app.ParamsKeeper.Subspace(baseapp.Paramspace).
+		WithKeyTable(paramstypes.ConsensusParamsKeyTable()),
 	)
 
 	// add capability keeper and ScopeToModule for ibc module
@@ -288,15 +290,22 @@ func NewLikeApp(
 
 	// add keepers
 	app.AccountKeeper = authkeeper.NewAccountKeeper(
-		appCodec, keys[authtypes.StoreKey], authSubspace, authtypes.ProtoBaseAccount, maccPerms,
+		appCodec,
+		keys[authtypes.StoreKey],
+		authSubspace,
+		authtypes.ProtoBaseAccount,
+		maccPerms,
+		Bech32MainPrefix,
+		// TODO: check bech32 prefix handling in v0.46
 	)
 	app.BankKeeper = bankkeeper.NewBaseKeeper(
-		appCodec, keys[banktypes.StoreKey], app.AccountKeeper, bankSubspace, app.ModuleAccountAddrs(),
+		appCodec, keys[banktypes.StoreKey], app.AccountKeeper, bankSubspace, app.BlockedModuleAccountAddrs(),
 	)
 	app.AuthzKeeper = authzkeeper.NewKeeper(
 		keys[authzkeeper.StoreKey],
 		appCodec,
 		app.BaseApp.MsgServiceRouter(),
+		app.AccountKeeper,
 	)
 	app.FeeGrantKeeper = feegrantkeeper.NewKeeper(
 		appCodec,
@@ -311,8 +320,13 @@ func NewLikeApp(
 		app.AccountKeeper, app.BankKeeper, authtypes.FeeCollectorName,
 	)
 	app.DistrKeeper = distrkeeper.NewKeeper(
-		appCodec, keys[distrtypes.StoreKey], distrSubspace, app.AccountKeeper, app.BankKeeper,
-		&stakingKeeper, authtypes.FeeCollectorName, app.ModuleAccountAddrs(),
+		appCodec,
+		keys[distrtypes.StoreKey],
+		distrSubspace,
+		app.AccountKeeper,
+		app.BankKeeper,
+		&stakingKeeper,
+		authtypes.FeeCollectorName,
 	)
 	app.SlashingKeeper = slashingkeeper.NewKeeper(
 		appCodec, keys[slashingtypes.StoreKey], &stakingKeeper, slashingSubspace,
@@ -320,12 +334,40 @@ func NewLikeApp(
 	app.CrisisKeeper = crisiskeeper.NewKeeper(
 		crisisSubspace, invCheckPeriod, app.BankKeeper, authtypes.FeeCollectorName,
 	)
-	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
-	app.registerUpgradeHandlers()
-	app.IscnKeeper = iscnkeeper.NewKeeper(appCodec, keys[iscntypes.StoreKey], app.AccountKeeper, app.BankKeeper, iscnSubspace)
+	app.UpgradeKeeper = upgradekeeper.NewKeeper(
+		skipUpgradeHeights,
+		keys[upgradetypes.StoreKey],
+		appCodec,
+		homePath,
+		app.BaseApp,
+		authtypes.NewModuleAddress(govtypes.ModuleName).String(),
+	)
 
-	app.NftKeeper = nftkeeper.NewKeeper(keys[nftkeeper.StoreKey], appCodec, app.AccountKeeper, app.BankKeeper)
-	app.LikeNftKeeper = *likenftkeeper.NewKeeper(app.appCodec, keys[likenfttypes.StoreKey], app.memKeys[likenfttypes.MemStoreKey], likeNftSubspace, app.AccountKeeper, app.BankKeeper, app.IscnKeeper, app.NftKeeper)
+	app.registerUpgradeHandlers()
+	app.IscnKeeper = iscnkeeper.NewKeeper(
+		appCodec,
+		keys[iscntypes.StoreKey],
+		app.AccountKeeper,
+		app.BankKeeper,
+		iscnSubspace,
+	)
+
+	app.NftKeeper = nftkeeper.NewKeeper(
+		keys[nftkeeper.StoreKey],
+		appCodec,
+		app.AccountKeeper,
+		app.BankKeeper,
+	)
+	app.LikeNftKeeper = *likenftkeeper.NewKeeper(
+		app.appCodec,
+		keys[likenfttypes.StoreKey],
+		app.memKeys[likenfttypes.MemStoreKey],
+		likeNftSubspace,
+		app.AccountKeeper,
+		app.BankKeeper,
+		app.IscnKeeper,
+		app.NftKeeper,
+	)
 
 	// register the staking hooks
 	// NOTE: stakingKeeper above is passed by reference, so that it will contain these hooks
@@ -339,28 +381,46 @@ func NewLikeApp(
 	)
 
 	// register the proposal types
-	govRouter := govtypes.NewRouter()
-	govRouter.AddRoute(govtypes.RouterKey, govtypes.ProposalHandler).
+	govRouter := govv1beta1.NewRouter()
+	govRouter.AddRoute(govtypes.RouterKey, govv1beta1.ProposalHandler).
 		AddRoute(paramproposal.RouterKey, params.NewParamChangeProposalHandler(app.ParamsKeeper)).
 		AddRoute(distrtypes.RouterKey, distr.NewCommunityPoolSpendProposalHandler(app.DistrKeeper)).
 		AddRoute(upgradetypes.RouterKey, upgrade.NewSoftwareUpgradeProposalHandler(app.UpgradeKeeper)).
 		AddRoute(ibcclienttypes.RouterKey, ibcclient.NewClientProposalHandler(app.IBCKeeper.ClientKeeper))
+
+	govConfig := govtypes.DefaultConfig()
 	app.GovKeeper = govkeeper.NewKeeper(
-		appCodec, keys[govtypes.StoreKey], govSubspace, app.AccountKeeper, app.BankKeeper,
-		&stakingKeeper, govRouter,
+		appCodec,
+		keys[govtypes.StoreKey],
+		govSubspace,
+		app.AccountKeeper,
+		app.BankKeeper,
+		&stakingKeeper,
+		govRouter,
+		bApp.MsgServiceRouter(),
+		govConfig,
 	)
 
 	// Create Transfer Keepers
 	app.TransferKeeper = ibctransferkeeper.NewKeeper(
-		appCodec, keys[ibctransfertypes.StoreKey], ibcTransferSubspace,
-		app.IBCKeeper.ChannelKeeper, &app.IBCKeeper.PortKeeper,
-		app.AccountKeeper, app.BankKeeper, scopedTransferKeeper,
+		appCodec,
+		keys[ibctransfertypes.StoreKey],
+		ibcTransferSubspace,
+		app.IBCKeeper.ChannelKeeper,
+		app.IBCKeeper.ChannelKeeper,
+		&app.IBCKeeper.PortKeeper,
+		app.AccountKeeper,
+		app.BankKeeper,
+		scopedTransferKeeper,
 	)
-	transferModule := transfer.NewAppModule(app.TransferKeeper)
+	transferAppModule := transfer.NewAppModule(app.TransferKeeper)
+	transferIBCModule := transfer.NewIBCModule(app.TransferKeeper)
+
+	// TODO: Inter-Chain Account
 
 	// Create static IBC router, add transfer route, then set and seal it
 	ibcRouter := porttypes.NewRouter()
-	ibcRouter.AddRoute(ibctransfertypes.ModuleName, transferModule)
+	ibcRouter.AddRoute(ibctransfertypes.ModuleName, transferIBCModule)
 	app.IBCKeeper.SetRouter(ibcRouter)
 
 	// create evidence keeper with router
@@ -388,7 +448,7 @@ func NewLikeApp(
 		crisis.NewAppModule(&app.CrisisKeeper, skipGenesisInvariants),
 		feegrantmodule.NewAppModule(appCodec, app.AccountKeeper, app.BankKeeper, app.FeeGrantKeeper, app.interfaceRegistry),
 		gov.NewAppModule(appCodec, app.GovKeeper, app.AccountKeeper, app.BankKeeper),
-		mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper),
+		mint.NewAppModule(appCodec, app.MintKeeper, app.AccountKeeper, nil),
 		slashing.NewAppModule(
 			appCodec, app.SlashingKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper,
 		),
@@ -399,7 +459,7 @@ func NewLikeApp(
 		upgrade.NewAppModule(app.UpgradeKeeper),
 		evidence.NewAppModule(app.EvidenceKeeper),
 		ibc.NewAppModule(app.IBCKeeper),
-		transferModule,
+		transferAppModule,
 		params.NewAppModule(app.ParamsKeeper),
 		authzmodule.NewAppModule(appCodec, app.AuthzKeeper, app.AccountKeeper, app.BankKeeper, app.interfaceRegistry),
 		iscn.NewAppModule(app.IscnKeeper),
@@ -507,7 +567,7 @@ func NewLikeApp(
 				SignModeHandler: encodingConfig.TxConfig.SignModeHandler(),
 				SigGasConsumer:  ante.DefaultSigVerificationGasConsumer,
 			},
-			IBCChannelkeeper: app.IBCKeeper.ChannelKeeper,
+			IBCKeeper: app.IBCKeeper,
 		},
 	)
 	if err != nil {
@@ -618,6 +678,12 @@ func (app *LikeApp) ModuleAccountAddrs() map[string]bool {
 	return modAccAddrs
 }
 
+func (app *LikeApp) BlockedModuleAccountAddrs() map[string]bool {
+	modAccAddrs := app.ModuleAccountAddrs()
+	delete(modAccAddrs, authtypes.NewModuleAddress(govtypes.ModuleName).String())
+	return modAccAddrs
+}
+
 func (app *LikeApp) AppCodec() codec.Codec {
 	return app.appCodec
 }
@@ -641,7 +707,7 @@ func (app *LikeApp) GetScopedTransferKeeper() capabilitykeeper.ScopedKeeper {
 func (app *LikeApp) GetTxConfig() client.TxConfig {
 	return MakeEncodingConfig().TxConfig
 }
-func (app *LikeApp) GetKeys() map[string]*sdk.KVStoreKey {
+func (app *LikeApp) GetKeys() map[string]*storetypes.KVStoreKey {
 	return app.keys
 }
 
@@ -649,11 +715,8 @@ func (app *LikeApp) GetKeys() map[string]*sdk.KVStoreKey {
 // API server.
 func (app *LikeApp) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig) {
 	clientCtx := apiSvr.ClientCtx
-	rpc.RegisterRoutes(clientCtx, apiSvr.Router)
-	authrest.RegisterTxRoutes(clientCtx, apiSvr.Router)
 	authtx.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
 	tmservice.RegisterGRPCGatewayRoutes(clientCtx, apiSvr.GRPCGatewayRouter)
-	ModuleBasics.RegisterRESTRoutes(clientCtx, apiSvr.Router)
 	ModuleBasics.RegisterGRPCGatewayRoutes(apiSvr.ClientCtx, apiSvr.GRPCGatewayRouter)
 
 	// register swagger API from root so that other applications can override easily
@@ -669,7 +732,12 @@ func (app *LikeApp) RegisterTxService(clientCtx client.Context) {
 
 // RegisterTendermintService implements the Application.RegisterTendermintService method.
 func (app *LikeApp) RegisterTendermintService(clientCtx client.Context) {
-	tmservice.RegisterTendermintService(app.BaseApp.GRPCQueryRouter(), clientCtx, app.interfaceRegistry)
+	tmservice.RegisterTendermintService(
+		clientCtx,
+		app.BaseApp.GRPCQueryRouter(),
+		app.interfaceRegistry,
+		app.Query,
+	)
 }
 
 // RegisterSwaggerAPI registers the swagger routes on the API router

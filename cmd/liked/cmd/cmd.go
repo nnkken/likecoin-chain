@@ -19,6 +19,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/snapshots"
+	snapshottypes "github.com/cosmos/cosmos-sdk/snapshots/types"
 	"github.com/cosmos/cosmos-sdk/store"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -36,6 +37,7 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
 
+	tmcfg "github.com/tendermint/tendermint/config"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
@@ -137,6 +139,18 @@ func txCommand() *cobra.Command {
 	return txCmd
 }
 
+// initTendermintConfig helps to override default Tendermint Config values.
+// return tmcfg.DefaultConfig if no custom configuration is required for the application.
+func initTendermintConfig() *tmcfg.Config {
+	cfg := tmcfg.DefaultConfig()
+
+	// these values put a higher strain on node memory
+	// cfg.P2P.MaxNumInboundPeers = 100
+	// cfg.P2P.MaxNumOutboundPeers = 40
+
+	return cfg
+}
+
 // initAppConfig helps to override default appConfig template and configs.
 // return "", nil if no custom configuration is required for the application.
 func initAppConfig() (string, interface{}) {
@@ -156,7 +170,7 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 	encodingConfig := app.MakeEncodingConfig()
 
 	initClientCtx := client.Context{}.
-		WithJSONCodec(encodingConfig.Marshaler).
+		WithCodec(encodingConfig.Codec).
 		WithInterfaceRegistry(encodingConfig.InterfaceRegistry).
 		WithTxConfig(encodingConfig.TxConfig).
 		WithLegacyAmino(encodingConfig.Amino).
@@ -174,8 +188,9 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 			}
 
 			customAppTemplate, customAppConfig := initAppConfig()
+			customTmConfig := initTendermintConfig()
 
-			return server.InterceptConfigsPreRunHandler(cmd, customAppTemplate, customAppConfig)
+			return server.InterceptConfigsPreRunHandler(cmd, customAppTemplate, customAppConfig, customTmConfig)
 		},
 	}
 
@@ -216,7 +231,7 @@ func NewRootCmd() (*cobra.Command, app.EncodingConfig) {
 func Execute() {
 	rootCmd, _ := NewRootCmd()
 
-	if err := svrcmd.Execute(rootCmd, app.DefaultNodeHome); err != nil {
+	if err := svrcmd.Execute(rootCmd, "LIKE", app.DefaultNodeHome); err != nil {
 		switch e := err.(type) {
 		case server.ErrorCode:
 			os.Exit(e.Code)
@@ -255,6 +270,10 @@ func newApp(
 	if err != nil {
 		panic(err)
 	}
+	snapshotOptions := snapshottypes.NewSnapshotOptions(
+		cast.ToUint64(appOpts.Get(server.FlagStateSyncSnapshotInterval)),
+		cast.ToUint32(appOpts.Get(server.FlagStateSyncSnapshotKeepRecent)),
+	)
 
 	return app.NewLikeApp(
 		logger, db, traceStore, true, skipUpgradeHeights,
@@ -270,13 +289,7 @@ func newApp(
 		baseapp.SetInterBlockCache(cache),
 		baseapp.SetTrace(cast.ToBool(appOpts.Get(server.FlagTrace))),
 		baseapp.SetIndexEvents(cast.ToStringSlice(appOpts.Get(server.FlagIndexEvents))),
-		baseapp.SetSnapshotStore(snapshotStore),
-		baseapp.SetSnapshotInterval(
-			cast.ToUint64(appOpts.Get(server.FlagStateSyncSnapshotInterval)),
-		),
-		baseapp.SetSnapshotKeepRecent(
-			cast.ToUint32(appOpts.Get(server.FlagStateSyncSnapshotKeepRecent)),
-		),
+		baseapp.SetSnapshot(snapshotStore, snapshotOptions),
 	)
 }
 
@@ -285,7 +298,7 @@ func exportAppState(
 	jailAllowedAddrs []string, appOpts servertypes.AppOptions,
 ) (servertypes.ExportedApp, error) {
 	encodingConfig := app.MakeEncodingConfig()
-	encodingConfig.Marshaler = codec.NewProtoCodec(encodingConfig.InterfaceRegistry)
+	encodingConfig.Codec = codec.NewProtoCodec(encodingConfig.InterfaceRegistry)
 	var likeApp *app.LikeApp
 	if height != -1 {
 		likeApp = app.NewLikeApp(
